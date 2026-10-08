@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ASCII Piano Roll</title>
+<title>Musiciate</title>
 <meta name="description" content="Type a word or paste ASCII art and hear it played on a piano roll.">
 <style>
   :root {
@@ -59,11 +59,23 @@
     color: var(--text);
     font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 40px; }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+  .wrap { max-width: 1180px; width: 100%; margin: 0 auto; padding: 20px 16px 32px; flex: 1; }
 
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
-  h1 span { color: var(--muted); font-weight: 500; }
+  .logo { display: inline-flex; align-items: center; gap: 10px; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+  .logo svg { flex: none; }
+  .logo .word {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .logo small { font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--muted); }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 18px 16px; text-align: center;
+    color: var(--muted); font-size: 13px;
+  }
+  footer strong { color: var(--text); font-weight: 600; }
 
   /* ---------- AI status pill ---------- */
   .pill {
@@ -160,7 +172,18 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>ASCII Piano Roll <span>· text → music</span></h1>
+    <h1 class="logo">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent-2)"/></linearGradient></defs>
+        <rect x="1" y="1" width="26" height="26" rx="7" fill="url(#lg)"/>
+        <rect x="6" y="16" width="6" height="3.5" rx="1.5" fill="#fff"/>
+        <rect x="10" y="11" width="9" height="3.5" rx="1.5" fill="#fff" opacity=".85"/>
+        <rect x="15" y="6" width="7" height="3.5" rx="1.5" fill="#fff" opacity=".7"/>
+        <rect x="13" y="21" width="9" height="2.5" rx="1.25" fill="#fff" opacity=".55"/>
+      </svg>
+      <span class="word">musiciate</span>
+      <small>text → music</small>
+    </h1>
     <div class="pill" id="pill" data-state="idle" role="status" aria-live="polite">
       <span class="orb"></span>
       <span id="pillText">Ready</span>
@@ -268,6 +291,7 @@
     </div>
   </section>
 </div>
+<footer>Built as part of <strong>Sense Labs</strong> experiments by <strong>Boston Sense</strong></footer>
 <script type="module" src="./app.js"></script>
 </body>
 </html>
