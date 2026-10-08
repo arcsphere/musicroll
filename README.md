@@ -28,7 +28,7 @@ Or push this folder to GitHub and import it in Vercel: Framework preset **Other*
 
 ## Author
 
-**Boston Sense Labs**
+**[Boston Sense Labs](https://bostonsense.com)**
 
 ## License
 
