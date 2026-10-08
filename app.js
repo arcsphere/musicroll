@@ -983,7 +983,7 @@ els.play.addEventListener("click", () => {
 });
 els.replay.addEventListener("click", startPerformance);
 document.addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || e.target.closest("textarea, select, input, button")) return;
+  if (e.code !== "Space" || e.target.closest("textarea, select, input, button, dialog")) return;
   e.preventDefault();
   els.play.click();
 });

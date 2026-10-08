@@ -76,6 +76,34 @@
     color: var(--muted); font-size: 13px;
   }
   footer strong { color: var(--text); font-weight: 600; }
+  footer nav { display: flex; justify-content: center; gap: 18px; margin-top: 8px; }
+  .link { font: inherit; font-size: 13px; background: none; border: 0; padding: 2px 0; cursor: pointer; color: var(--accent); }
+  .link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+  dialog {
+    width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto;
+    padding: 28px 28px 24px; border: 1px solid var(--border); border-radius: 18px;
+    background: var(--panel); color: var(--text);
+    box-shadow: 0 24px 60px rgba(0,0,0,0.3);
+  }
+  dialog::backdrop { background: rgba(10, 8, 20, 0.55); backdrop-filter: blur(3px); }
+  dialog[open] { animation: pop .22s ease-out; }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+  dialog h2 { margin: 0 0 14px; font-size: 22px; letter-spacing: -0.02em; }
+  dialog h2 .word { background: linear-gradient(135deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  dialog p { margin: 0 0 12px; color: var(--text); }
+  dialog .muted { color: var(--muted); }
+  dialog ol { margin: 0 0 14px; padding-left: 20px; }
+  dialog li { margin-bottom: 8px; }
+  dialog .lead { font-size: 17px; line-height: 1.5; font-weight: 500; }
+  dialog .sign { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+  .close {
+    position: sticky; float: right; top: 0; margin: -12px -12px 0 0;
+    width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); font-size: 18px; line-height: 1; cursor: pointer;
+  }
+  .close:hover { border-color: var(--accent); color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { dialog[open] { animation: none; } }
 
   /* ---------- AI status pill ---------- */
   .pill {
@@ -291,7 +319,51 @@
     </div>
   </section>
 </div>
-<footer>Built as part of <strong>Sense Labs</strong> experiments by <strong>Boston Sense</strong></footer>
+<footer>
+  Built as part of <strong>Sense Labs</strong> experiments by <strong>Boston Sense</strong>
+  <nav>
+    <button class="link" type="button" data-open="howDialog">How it works</button>
+    <button class="link" type="button" data-open="aboutDialog">About musiciate</button>
+  </nav>
+</footer>
+
+<dialog id="howDialog" aria-labelledby="howTitle">
+  <button class="close" type="button" aria-label="Close" data-close>×</button>
+  <h2 id="howTitle">How it works</h2>
+  <ol>
+    <li><strong>Write something.</strong> Type a word, or paste ASCII art.</li>
+    <li><strong>It becomes a grid.</strong> A word is first drawn in a small 5×7 pixel font. With ASCII art, every character that isn't a space becomes a cell.</li>
+    <li><strong>Rows are pitch, columns are time.</strong> The top line is the highest note. Each column is one step, a 16th note. Characters side by side join into one held note when <em>Sustain runs</em> is on.</li>
+    <li><strong>Rows follow a scale.</strong> Pentatonic is the default, so any shape sounds musical. Try major, minor, blues or chromatic, and pick a key.</li>
+    <li><strong>Press Play.</strong> The letters fall into place, the notes form, a 1-2-3-4 count-in plays, and the roll is performed on the instrument you chose.</li>
+    <li><strong>Add more if you like.</strong> Turn on drums, change the tempo, or switch on Loop. You can keep typing while it plays and the music changes as you go.</li>
+  </ol>
+  <p class="muted">Tips: lines that slope make melodies, tall columns make chords, and gaps make silence. Your name has a tune too.</p>
+</dialog>
+
+<dialog id="aboutDialog" aria-labelledby="aboutTitle">
+  <button class="close" type="button" aria-label="Close" data-close>×</button>
+  <h2 id="aboutTitle">About <span class="word">musiciate</span></h2>
+  <p class="lead">Every word has a shape. Every shape has a rhythm. musiciate is a way of listening to both.</p>
+  <p>Language, drawing and music are three of the oldest ways we have to say what we feel. We usually keep them apart: words on the page, pictures on the wall, sound in the air. Here they share a single grid. The letters you type become a picture, and the picture becomes a melody.</p>
+  <p>Nothing is composed and nothing is added. It is only translated. A heart doesn't sound like a star. A name doesn't sound like a question. The music was already there, waiting in the form.</p>
+  <p>It's a small reminder that expression is one thing wearing different clothes. Meaning moves freely between what we say, what we draw and what we hear.</p>
+  <p class="sign">musiciate is a project by <strong>Boston Sense</strong>, part of the <strong>Sense Labs</strong> experiments: small tools that model how art, music, language and expression flow into one another.</p>
+</dialog>
+
+<script>
+  document.addEventListener("click", (e) => {
+    const opener = e.target.closest("[data-open]");
+    if (opener) { document.getElementById(opener.dataset.open).showModal(); return; }
+    if (e.target.closest("[data-close]")) { e.target.closest("dialog").close(); return; }
+    // click on the backdrop closes the dialog
+    if (e.target.tagName === "DIALOG") {
+      const r = e.target.getBoundingClientRect();
+      const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (!inside) e.target.close();
+    }
+  });
+</script>
 <script type="module" src="./app.js"></script>
 </body>
 </html>
