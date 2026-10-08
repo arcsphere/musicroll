@@ -21,8 +21,12 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 // ---------------------------------------------------------------- presets
 
-const PRESETS = {
-  Heart: [
+const WORDS = ["HELLO", "LOVE", "MUSIC", "DREAM", "HOPE", "PEACE", "OCEAN", "LIGHT", "BOSTON", "JOY"];
+
+// Hand-drawn shapes for emojis. Typing one of these emojis (or several) plays its shape.
+const art = (...lines) => lines.join("\n");
+const EMOJI_ART = {
+  "❤": art(
     "  ***     ***",
     " *****   *****",
     "******* *******",
@@ -33,36 +37,124 @@ const PRESETS = {
     "    *******",
     "     *****",
     "      ***",
-    "       *",
-  ].join("\n"),
-  HELLO: "HELLO",
-  Smiley: [
-    "    .-\"\"\"\"\"-.",
-    "  .'  o   o  '.",
-    " /             \\",
-    "|   \\       /   |",
-    " \\   '-...-'   /",
-    "  '.         .'",
-    "    '-.....-'",
-  ].join("\n"),
-  Wave: [
+    "       *"),
+  "😀": art(
+    "     ******",
+    "   **      **",
+    "  *          *",
+    " *   **  **   *",
+    " *            *",
+    " *  *      *  *",
+    "  *  ******  *",
+    "   **      **",
+    "     ******"),
+  "⭐": art(
+    "        *",
+    "       ***",
+    "      *****",
+    "*****************",
+    "  *************",
+    "    *********",
+    "   ***********",
+    "  ****     ****",
+    " **           **"),
+  "🌙": art(
+    "      *****",
+    "    ***",
+    "   **",
+    "  **",
+    "  **",
+    "  **",
+    "   **",
+    "    ***",
+    "      *****"),
+  "☀": art(
+    "  *     *     *",
+    "    *   *   *",
+    "      *****",
+    "*  * ******* *  *",
+    "     *******",
+    "*  * ******* *  *",
+    "      *****",
+    "    *   *   *",
+    "  *     *     *"),
+  "🌊": art(
     "      **                **",
     "    **  **            **  **",
     "  **      **        **      **",
     "**          **    **          **",
-    "              ****",
-  ].join("\n"),
-  Star: [
-    "        *",
-    "       ***",
-    "  *************",
-    "    *********",
-    "     *******",
-    "    ***   ***",
-    "   **       **",
-  ].join("\n"),
-  "AWS SAA": "AWS SAA",
+    "              ****"),
+  "🎵": art(
+    "     ***********",
+    "     **********",
+    "     *        *",
+    "     *        *",
+    "     *        *",
+    "  ****     ****",
+    " *****    *****",
+    "  ***      ***"),
+  "🌸": art(
+    "    **   **",
+    "   **** ****",
+    "    *******",
+    " ****  *  ****",
+    "    *******",
+    "   **** ****",
+    "    **   **",
+    "       *",
+    "     * * *",
+    "       *"),
+  "🐱": art(
+    " *          *",
+    " **        **",
+    " * ******** *",
+    " *          *",
+    "*   **  **   *",
+    "*     **     *",
+    "*   * ** *   *",
+    " *          *",
+    "  **********"),
+  "⚡": art(
+    "      ****",
+    "     ****",
+    "    ****",
+    "   ****",
+    "  ********",
+    "     ****",
+    "    ***",
+    "   **",
+    "  *"),
 };
+const EMOJIS = Object.keys(EMOJI_ART);
+
+// If the text is only known emojis (and spaces), return them in order.
+const segmenter = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter() : null;
+function emojiSequence(text) {
+  const parts = segmenter ? [...segmenter.segment(text)].map((x) => x.segment) : [...text];
+  const seq = [];
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    const key = part.replace(/️/g, "");
+    if (!EMOJI_ART[key]) return null;
+    seq.push(key);
+  }
+  return seq.length ? seq : null;
+}
+
+// Place several art grids side by side, bottom-aligned, with a gap between them.
+function joinGrids(grids, gap = 3) {
+  const H = Math.max(...grids.map((gr) => gr.length));
+  const rows = Array.from({ length: H }, () => []);
+  grids.forEach((gr, i) => {
+    const w = gr[0]?.length ?? 0;
+    const pad = H - gr.length;
+    for (let r = 0; r < H; r++) {
+      if (i > 0) rows[r].push(...Array(gap).fill(null));
+      rows[r].push(...(r < pad ? Array(w).fill(null) : gr[r - pad]));
+    }
+  });
+  return rows.map((r) => r.slice(0, MAX_COLS));
+}
 
 // ---------------------------------------------------------------- 5x7 pixel font
 
@@ -133,8 +225,10 @@ const BLACK = new Set([1, 3, 6, 8, 10]);
 
 function buildSong() {
   const text = els.text.value;
-  const mode = els.mode.value === "auto" ? detectMode(text) : els.mode.value;
-  const grid = mode === "word" ? wordGrid(text) : artGrid(text);
+  const emojis = els.mode.value !== "word" ? emojiSequence(text) : null;
+  const mode = emojis ? "emoji" : els.mode.value === "auto" ? detectMode(text) : els.mode.value;
+  const grid = emojis ? joinGrids(emojis.map((e) => artGrid(EMOJI_ART[e])))
+    : mode === "word" ? wordGrid(text) : artGrid(text);
   const R = grid.length;
   const C = R ? grid[0].length : 0;
 
@@ -946,16 +1040,27 @@ function refresh() {
     : "empty";
 }
 
-for (const [name, text] of Object.entries(PRESETS)) {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.className = "chip";
-  b.textContent = name;
-  b.addEventListener("click", () => { els.text.value = text; refresh(); });
-  els.presets.append(b);
+function presetRow(label, items, cls) {
+  const row = document.createElement("div");
+  row.className = "preset-row";
+  const tag = document.createElement("span");
+  tag.className = "preset-label";
+  tag.textContent = label;
+  row.append(tag);
+  for (const text of items) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chip " + cls;
+    b.textContent = text;
+    b.addEventListener("click", () => { els.text.value = text; refresh(); });
+    row.append(b);
+  }
+  els.presets.append(row);
 }
+presetRow("Words", WORDS, "");
+presetRow("Emojis", EMOJIS.map((e) => (/[❤☀]/.test(e) ? e + "\uFE0F" : e)), "emoji");
 
-els.text.value = PRESETS.Heart;
+els.text.value = "❤️";
 for (const el of [els.text, els.mode, els.scale, els.root, els.sustain]) el.addEventListener("input", refresh);
 els.bpm.addEventListener("input", () => { els.bpmOut.textContent = els.bpm.value; });
 els.drums.addEventListener("change", () => {
