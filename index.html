@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Musiciate</title>
-<meta name="description" content="Type a word or paste ASCII art and hear it played on a piano roll.">
+<title>musiciate · find the shape and sound of words</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="description" content="Give words and ASCII art a shape and a sound. Type something and hear it played on a piano roll.">
 <style>
   :root {
     --bg: #f4f2ee;
@@ -95,7 +96,7 @@
   dialog .muted { color: var(--muted); }
   dialog ol { margin: 0 0 14px; padding-left: 20px; }
   dialog li { margin-bottom: 8px; }
-  dialog .lead { font-size: 17px; line-height: 1.5; font-weight: 500; }
+  dialog .lead { font-size: 18px; line-height: 1.45; font-weight: 700; text-align: center; margin: 20px 0; padding: 14px 0; border-block: 1px solid var(--border); }
   dialog .sign { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
   .close {
     position: sticky; float: right; top: 0; margin: -12px -12px 0 0;
@@ -344,10 +345,11 @@
 <dialog id="aboutDialog" aria-labelledby="aboutTitle">
   <button class="close" type="button" aria-label="Close" data-close>×</button>
   <h2 id="aboutTitle">About <span class="word">musiciate</span></h2>
-  <p class="lead">Every word has a shape. Every shape has a rhythm. musiciate is a way of listening to both.</p>
-  <p>Language, drawing and music are three of the oldest ways we have to say what we feel. We usually keep them apart: words on the page, pictures on the wall, sound in the air. Here they share a single grid. The letters you type become a picture, and the picture becomes a melody.</p>
-  <p>Nothing is composed and nothing is added. It is only translated. A heart doesn't sound like a star. A name doesn't sound like a question. The music was already there, waiting in the form.</p>
-  <p>It's a small reminder that expression is one thing wearing different clothes. Meaning moves freely between what we say, what we draw and what we hear.</p>
+  <p>musiciate started with a small question: what does a word look like, and what would it sound like if you could hear its shape?</p>
+  <p>Type something and it gets drawn on a grid. Each mark becomes a note. Higher on the page means a higher pitch, and further along means later in time. A word gets an outline, a drawing gets a rhythm, and somewhere between the two you find an expression of it you hadn't noticed before.</p>
+  <p class="lead">Every word has a shape. Every shape has a sound.</p>
+  <p>Nothing here is composed for you, and there's no right answer. Your name, a heart, a row of slashes: each one plays back as itself. Some of it is lovely, some of it is strange, and all of it is true to what you wrote.</p>
+  <p>We made it to play in the space between language, art and music, and to look at expression from a slightly different angle.</p>
   <p class="sign">musiciate is a project by <strong>Boston Sense</strong>, part of the <strong>Sense Labs</strong> experiments: small tools that model how art, music, language and expression flow into one another.</p>
 </dialog>
 
