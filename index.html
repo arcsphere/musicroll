@@ -77,6 +77,9 @@
     color: var(--muted); font-size: 13px;
   }
   footer strong { color: var(--text); font-weight: 600; }
+  a.brand { color: inherit; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
+  a.brand:hover { text-decoration-color: var(--accent); }
+  a.brand:hover strong { color: var(--accent); }
   footer nav { display: flex; justify-content: center; gap: 18px; margin-top: 8px; }
   .link { font: inherit; font-size: 13px; background: none; border: 0; padding: 2px 0; cursor: pointer; color: var(--accent); }
   .link:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -170,6 +173,8 @@
   .controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 12px; }
   label.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
   select, input[type="range"] { width: 100%; }
+  .field-hint { font-size: 11px; color: var(--muted); line-height: 1.3; }
+  label.field.dim select { opacity: .55; }
   select {
     font: inherit; font-size: 13px; color: var(--text); background: var(--input-bg);
     border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px;
@@ -241,6 +246,18 @@
             <option value="art">ASCII art</option>
           </select>
         </label>
+        <label class="field">Font style
+          <select id="font">
+            <option value="classic">Classic</option>
+            <option value="bold">Bold</option>
+            <option value="italic">Italic</option>
+            <option value="tall">Tall</option>
+            <option value="wide">Wide</option>
+            <option value="dotted">Dotted</option>
+            <option value="mixed">Mixed</option>
+          </select>
+          <small class="field-hint" id="fontHint"></small>
+        </label>
         <label class="field">Instrument
           <select id="instrument">
             <option value="acoustic_grand_piano">Grand piano</option>
@@ -273,6 +290,15 @@
             <option value="0">C</option><option value="2">D</option><option value="3">E♭</option>
             <option value="4">E</option><option value="5">F</option><option value="7">G</option>
             <option value="9">A</option><option value="10">B♭</option>
+          </select>
+        </label>
+        <label class="field">Octave
+          <select id="octave">
+            <option value="-2">−2 (lower)</option>
+            <option value="-1">−1</option>
+            <option value="0" selected>Auto</option>
+            <option value="1">+1</option>
+            <option value="2">+2 (higher)</option>
           </select>
         </label>
         <label class="field">Tempo <output id="bpmOut">110</output>
@@ -324,7 +350,7 @@
   </section>
 </div>
 <footer>
-  Built as part of <strong>Sense Labs</strong> experiments by <strong>Boston Sense</strong>
+  Built as part of <strong>Sense Labs</strong> experiments by <a class="brand" href="https://bostonsense.com" target="_blank" rel="noopener"><strong>Boston Sense</strong></a>
   <nav>
     <button class="link" type="button" data-open="howDialog">How it works</button>
     <button class="link" type="button" data-open="aboutDialog">About musiciate</button>
@@ -338,6 +364,7 @@
     <li><strong>Write something.</strong> Type a word, pick an emoji, or paste ASCII art.</li>
     <li><strong>It becomes a grid.</strong> A word is first drawn in a small 5×7 pixel font, and each emoji has its own hand-drawn shape. With ASCII art, every character that isn't a space becomes a cell.</li>
     <li><strong>Rows are pitch, columns are time.</strong> The top line is the highest note. Each column is one step, a 16th note. Characters side by side join into one held note when <em>Sustain runs</em> is on.</li>
+    <li><strong>The font changes the music.</strong> The same word in Bold plays fuller chords, in Italic the chords roll like a strum, Tall spreads it over more pitches, Wide slows it down, Dotted makes it light and staccato, and Mixed gives each letter its own style. The Octave setting moves everything higher or lower.</li>
     <li><strong>Rows follow a scale.</strong> Pentatonic is the default, so any shape sounds musical. Try major, minor, blues or chromatic, and pick a key.</li>
     <li><strong>Press Play.</strong> The letters fall into place, the notes form, a 1-2-3-4 count-in plays, and the roll is performed on the instrument you chose.</li>
     <li><strong>Add more if you like.</strong> Turn on drums, change the tempo, or switch on Loop. You can keep typing while it plays and the music changes as you go.</li>
@@ -353,7 +380,7 @@
   <p class="lead">Every word has a shape. Every shape has a sound.</p>
   <p>Nothing here is composed for you, and there's no right answer. Your name, a heart, a row of slashes: each one plays back as itself. Some of it is lovely, some of it is strange, and all of it is true to what you wrote.</p>
   <p>We made it to play in the space between language, art and music, and to look at expression from a slightly different angle.</p>
-  <p class="sign">musiciate is a project by <strong>Boston Sense</strong>, part of the <strong>Sense Labs</strong> experiments: small tools that model how art, music, language and expression flow into one another.</p>
+  <p class="sign">musiciate is a project by <a class="brand" href="https://bostonsense.com" target="_blank" rel="noopener"><strong>Boston Sense</strong></a>, part of the <strong>Sense Labs</strong> experiments: small tools that model how art, music, language and expression flow into one another.</p>
 </dialog>
 
 <script>

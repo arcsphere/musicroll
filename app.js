@@ -9,7 +9,7 @@ const smplrReady = import(SMPLR_URL).catch((err) => {
 
 const $ = (id) => document.getElementById(id);
 const els = {
-  text: $("text"), mode: $("mode"), instrument: $("instrument"), scale: $("scale"), root: $("root"),
+  text: $("text"), mode: $("mode"), instrument: $("instrument"), scale: $("scale"), root: $("root"), octave: $("octave"), font: $("font"), fontHint: $("fontHint"),
   bpm: $("bpm"), bpmOut: $("bpmOut"), sustain: $("sustain"), drums: $("drums"), drumOpts: $("drumOpts"),
   pattern: $("pattern"), kit: $("kit"), drumVol: $("drumVol"), loop: $("loop"), intro: $("intro"),
   play: $("play"), canvas: $("roll"), stage: $("stage"), pill: $("pill"), pillText: $("pillText"),
@@ -198,15 +198,55 @@ function artGrid(text) {
   return rows.map((r) => Array.from({ length: w }, (_, i) => (r[i] && r[i] !== " " ? r[i] : null)));
 }
 
-function wordGrid(text) {
+// Font styles reshape the letters, and the shape changes how the word sounds.
+const FONT_STYLES = {
+  classic: { label: "Classic", hint: "Even, steady phrasing" },
+  bold:    { label: "Bold",    hint: "Thicker strokes, fuller chords and longer notes" },
+  italic:  { label: "Italic",  hint: "Slanted, so chords roll like a strum" },
+  tall:    { label: "Tall",    hint: "Twice the height, a wider range of pitches" },
+  wide:    { label: "Wide",    hint: "Stretched out, slower and more spacious" },
+  dotted:  { label: "Dotted",  hint: "Broken strokes, light and staccato" },
+  mixed:   { label: "Mixed",   hint: "Each letter in a different style" },
+};
+const MIXED_CYCLE = ["classic", "italic", "bold", "dotted"];
+
+function glyphMatrix(ch) {
+  const glyph = FONT[ch] ?? FONT["?"];
+  return glyph.map((bits) => Array.from({ length: GLYPH_W }, (_, x) => !!(bits & (16 >> x))));
+}
+
+function styleGlyph(m, style) {
+  switch (style) {
+    case "bold":
+      return m.map((r) => Array.from({ length: r.length + 1 }, (_, x) => !!(r[x] || r[x - 1])));
+    case "italic":
+      return m.map((r, y) => {
+        const shift = Math.floor((m.length - 1 - y) / 2);
+        const max = Math.floor((m.length - 1) / 2);
+        return [...Array(shift).fill(false), ...r, ...Array(max - shift).fill(false)];
+      });
+    case "tall":
+      return m.flatMap((r) => [r, r]);
+    case "wide":
+      return m.map((r) => r.flatMap((v) => [v, v]));
+    case "dotted":
+      return m.map((r, y) => r.map((v, x) => v && (x + y) % 2 === 0));
+    default:
+      return m;
+  }
+}
+
+function wordGrid(text, style = "classic") {
   const chars = [...text.trim().toUpperCase()].slice(0, 60);
-  const rows = Array.from({ length: GLYPH_H }, () => []);
+  const H = style === "tall" ? GLYPH_H * 2 : GLYPH_H;
+  const rows = Array.from({ length: H }, () => []);
+  let letter = 0;
   chars.forEach((ch, idx) => {
     if (idx > 0) rows.forEach((r) => r.push(null));
     if (ch === " ") { rows.forEach((r) => r.push(null, null)); return; }
-    const glyph = FONT[ch] ?? FONT["?"];
-    for (let y = 0; y < GLYPH_H; y++)
-      for (let x = 0; x < GLYPH_W; x++) rows[y].push(glyph[y] & (16 >> x) ? ch : null);
+    const st = style === "mixed" ? MIXED_CYCLE[letter++ % MIXED_CYCLE.length] : style;
+    const m = styleGlyph(glyphMatrix(ch), st);
+    m.forEach((r, y) => r.forEach((v) => rows[y].push(v ? ch : null)));
   });
   return rows;
 }
@@ -228,7 +268,7 @@ function buildSong() {
   const emojis = els.mode.value !== "word" ? emojiSequence(text) : null;
   const mode = emojis ? "emoji" : els.mode.value === "auto" ? detectMode(text) : els.mode.value;
   const grid = emojis ? joinGrids(emojis.map((e) => artGrid(EMOJI_ART[e])))
-    : mode === "word" ? wordGrid(text) : artGrid(text);
+    : mode === "word" ? wordGrid(text, els.font.value) : artGrid(text);
   const R = grid.length;
   const C = R ? grid[0].length : 0;
 
@@ -245,6 +285,10 @@ function buildSong() {
     const d = Math.abs(b + span / 2 - 64);
     if (d < bestD) { bestD = d; base = b; }
   }
+  // Octave selector shifts the auto choice up or down, within the piano range.
+  base += 12 * +els.octave.value;
+  while (base + span > 108 && base - 12 >= 21) base -= 12;
+  while (base < 21) base += 12;
   const rowMidi = Array.from({ length: R }, (_, r) => Math.min(108, base + offset(r)));
 
   const notes = [];
@@ -1035,8 +1079,13 @@ function refresh() {
   if (play.state === "composing") buildIntroCells();
   const scale = els.scale.selectedOptions[0].textContent.toLowerCase();
   const key = NOTE_NAMES[+els.root.value];
+  const style = FONT_STYLES[els.font.value];
+  els.fontHint.textContent = song.mode === "word" ? style.hint : "Font styles apply to words";
+  els.font.closest("label").classList.toggle("dim", song.mode !== "word");
+  const oct = +els.octave.value;
+  const octLabel = oct ? ` · octave ${oct > 0 ? "+" : "−"}${Math.abs(oct)}` : "";
   els.info.textContent = song.R
-    ? `${song.mode} mode · ${song.R} rows × ${song.C} steps · ${song.notes.length} notes · ${key} ${scale}`
+    ? `${song.mode} mode${song.mode === "word" ? ` · ${style.label.toLowerCase()} font` : ""}${octLabel} · ${song.R} rows × ${song.C} steps · ${song.notes.length} notes · ${key} ${scale}`
     : "empty";
 }
 
@@ -1061,7 +1110,7 @@ presetRow("Words", WORDS, "");
 presetRow("Emojis", EMOJIS.map((e) => (/[❤☀]/.test(e) ? e + "\uFE0F" : e)), "emoji");
 
 els.text.value = "❤️";
-for (const el of [els.text, els.mode, els.scale, els.root, els.sustain]) el.addEventListener("input", refresh);
+for (const el of [els.text, els.mode, els.scale, els.root, els.octave, els.font, els.sustain]) el.addEventListener("input", refresh);
 els.bpm.addEventListener("input", () => { els.bpmOut.textContent = els.bpm.value; });
 els.drums.addEventListener("change", () => {
   els.drumOpts.classList.toggle("off", !els.drums.checked);
