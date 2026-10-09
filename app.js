@@ -350,6 +350,44 @@ const swingAmount = () => +els.swing.value / 100;
 // ---------------------------------------------------------------- audio
 
 let ctx = null, master = null, noiseBuf = null;
+
+// Safari (and so every browser on iPhone/iPad) says it "maybe" plays audio/ogg but can't decode
+// the Ogg Vorbis samples, which would leave instruments silent. There we load the MP3 soundfonts
+// and the M4A drum samples instead.
+const VORBIS_OK = (() => {
+  try { return document.createElement("audio").canPlayType('audio/ogg; codecs="vorbis"') === "probably"; } catch { return false; }
+})();
+const sampleStorage = {
+  fetch: (url) => fetch(VORBIS_OK ? url : url.replace(/-ogg\.js$/, "-mp3.js").replace(/\.ogg$/, ".m4a")),
+};
+const hasSamples = (inst) => Object.keys(inst?.player?.buffers ?? {}).length > 0;
+
+// iPhone: play through the ringer/silent switch like a music app, and wake audio inside the tap.
+let silentEl = null;
+function silentWavUrl() {
+  const n = 2000, buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+  const str = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF"); v.setUint32(4, 36 + n, true); str(8, "WAVEfmt "); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 8000, true);
+  v.setUint16(32, 1, true); v.setUint16(34, 8, true); str(36, "data"); v.setUint32(40, n, true);
+  new Uint8Array(buf, 44).fill(128);
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+}
+function unlockAudio() {
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}
+  if (!navigator.audioSession) {
+    if (!silentEl) {
+      silentEl = new Audio(silentWavUrl());
+      silentEl.loop = true;
+      silentEl.setAttribute("playsinline", "");
+    }
+    silentEl.play().catch(() => {});
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = ctx.createBuffer(1, 1, 22050);
+  src.connect(ctx.destination);
+  src.start(0);
+}
 const melodic = new Map();
 const kits = new Map();
 let activeInst = null, activeKit = null;
@@ -365,7 +403,7 @@ function ensureCtx() {
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   }
-  if (ctx.state === "suspended") ctx.resume();
+  if (ctx.state !== "running") ctx.resume();
   return ctx;
 }
 
@@ -377,9 +415,10 @@ function loadInstrument(name) {
   entry.ready = smplrReady
     .then((m) => {
       if (!m) throw new Error("smplr unavailable");
-      entry.inst = new m.Soundfont(ctx, { instrument: name });
+      entry.inst = new m.Soundfont(ctx, { instrument: name, storage: sampleStorage });
       return entry.inst.load;
     })
+    .then(() => { if (!hasSamples(entry.inst)) throw new Error("no samples could be decoded"); })
     .catch((err) => { console.warn("Instrument failed, falling back to synth:", name, err); entry.failed = true; })
     .then(() => {
       entry.loaded = true;
@@ -398,10 +437,11 @@ function loadKit(name) {
   entry.ready = smplrReady
     .then((m) => {
       if (!m) throw new Error("smplr unavailable");
-      entry.inst = new m.DrumMachine(ctx, { instrument: name });
+      entry.inst = new m.DrumMachine(ctx, { instrument: name, storage: sampleStorage });
       return entry.inst.load;
     })
     .then(() => {
+      if (!hasSamples(entry.inst)) throw new Error("no samples could be decoded");
       const names = entry.inst.sampleNames;
       const pick = (...res) => { for (const re of res) { const hit = names.find((s) => re.test(s)); if (hit) return hit; } return null; };
       entry.roles = Object.fromEntries(ROLES.map((role) => [role, pick(...KIT_ROLE_MATCH[role])]));
@@ -544,6 +584,7 @@ function setState(state) {
 function startPerformance() {
   ensureCtx();
   stopPerformance(true);
+  unlockAudio();
   if (!song.notes.length) { els.pillText.textContent = "Nothing to play — type something"; return; }
   play.loaded = false;
   play.skipCountIn = !els.intro.checked;
@@ -569,6 +610,7 @@ function stopPerformance(quiet = false) {
   play.ending = false;
   play.timeline = [];
   events = [];
+  silentEl?.pause();
   if (ctx) silence();
   if (!quiet) setState("idle");
 }
@@ -740,6 +782,7 @@ function updatePhase(t, now) {
   if (play.state === "playing" && play.ending && now >= play.endTime + 0.5) {
     clearInterval(play.timer);
     play.timer = null;
+    silentEl?.pause();
     setState("done");
   }
 }
