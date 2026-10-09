@@ -408,8 +408,46 @@
             <button class="btn-sm" id="dice" type="button" title="Make up a new beat">🎲 Randomise beat</button>
           </div>
         </div>
+        <div class="drum-opts off" id="bassOpts">
+          <label class="field">Bass style
+            <select id="bassStyle">
+              <option value="follow">Follow the melody</option>
+              <option value="random" hidden>🎲 Random</option>
+              <option value="root">Long roots</option>
+              <option value="pulse">Driving eighths</option>
+              <option value="rock">Rock</option>
+              <option value="octave">Disco octaves</option>
+              <option value="funk">Funk</option>
+              <option value="walking">Walking (jazz)</option>
+              <option value="bossa">Bossa nova</option>
+              <option value="reggae">Reggae</option>
+              <option value="synth">Synth pulse</option>
+              <option value="slides">808 slides</option>
+              <option value="waltz">Waltz (3/4)</option>
+            </select>
+          </label>
+          <label class="field">Bass sound
+            <select id="bassSound">
+              <option value="electric_bass_finger">Fingered electric</option>
+              <option value="electric_bass_pick">Picked electric</option>
+              <option value="fretless_bass">Fretless</option>
+              <option value="slap_bass_1">Slap</option>
+              <option value="acoustic_bass">Upright (acoustic)</option>
+              <option value="contrabass">Contrabass (bowed)</option>
+              <option value="synth_bass_1">Synth bass</option>
+              <option value="synth_bass_2">Synth bass 2</option>
+            </select>
+          </label>
+          <label class="field">Bass level
+            <input id="bassVol" type="range" min="0" max="100" value="75">
+          </label>
+          <div class="field dice-field">
+            <button class="btn-sm" id="bassDice" type="button" title="Make up a new bass line">🎲 Randomise bass</button>
+          </div>
+        </div>
       </div>
       <div class="toggles">
+        <label class="switch"><input type="checkbox" id="bass"> Bass</label>
         <label class="switch"><input type="checkbox" id="drums"> Drums</label>
         <label class="switch"><input type="checkbox" id="loop"> Loop</label>
         <label class="switch"><input type="checkbox" id="sustain" checked> Sustain runs</label>
@@ -439,7 +477,7 @@
     <button class="link" type="button" data-open="howDialog">How it works</button>
     <button class="link" type="button" data-open="aboutDialog">About musiciate</button>
   </nav>
-  <div class="version"><a id="version" target="_blank" rel="noopener">v2.0.0</a> · <a href="https://github.com/arcsphere/musicroll" target="_blank" rel="noopener">Open source</a></div>
+  <div class="version"><a id="version" target="_blank" rel="noopener">v2.1.0</a> · <a href="https://github.com/arcsphere/musicroll" target="_blank" rel="noopener">Open source</a></div>
 </footer>
 
 <dialog id="shareDialog" aria-labelledby="shareTitle">
@@ -472,7 +510,7 @@
     <li><strong>The font changes the music.</strong> The same word in Bold plays fuller chords, in Italic the chords roll like a strum, Tall spreads it over more pitches, Wide slows it down, Dotted makes it light and staccato, and Mixed gives each letter its own style. The Octave setting moves everything higher or lower.</li>
     <li><strong>Rows follow a scale.</strong> Pentatonic is the default, so any shape sounds musical. Try major, minor, blues or chromatic, and pick a key.</li>
     <li><strong>Press Play.</strong> The letters fall into place, the notes form, a 1-2-3-4 count-in plays, and the roll is performed on the instrument you chose.</li>
-    <li><strong>Add more if you like.</strong> Turn on drums and pick from 17 styles, or press 🎲 to make up a new beat. Add swing, change the tempo, or switch on Loop. You can keep typing while it plays and the music changes as you go.</li>
+    <li><strong>Add more if you like.</strong> Turn on bass and drums, pick a style for each, or press 🎲 to make up a new bass line or beat. The bass follows the notes of your words, so it always fits. Add swing, change the tempo, or switch on Loop. You can keep typing while it plays and the music changes as you go.</li>
     <li><strong>Share it or take it further.</strong> Share sends a link that holds the whole song. Export MIDI gives you a file to open in FL Studio, GarageBand or any music app.</li>
   </ol>
   <p class="muted">Tips: lines that slope make melodies, tall columns make chords, and gaps make silence. Your name has a tune too.</p>

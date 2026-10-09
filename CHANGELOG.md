@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.0 — 2026-10-09
+
+### Bass
+- **Bass track**, switched on and off like the drums. It follows the shape of your words, so it always fits the melody.
+- 12 bass styles: Follow the melody, Long roots, Driving eighths, Rock, Disco octaves, Funk, Walking (jazz), Bossa nova, Reggae, Synth pulse, 808 slides, Waltz.
+- 8 bass sounds: fingered, picked, fretless, slap, upright, bowed contrabass, and two synth basses.
+- **🎲 Randomise bass**: a new bass line and sound. Shared links replay it exactly.
+- A bass lane on the piano roll, a bass level slider, and bass in Surprise me and the MIDI export.
+
+### Fixes
+- Sound on iPhone and iPad: instruments load as MP3 and drums as M4A where Ogg can't be decoded. Audio plays even with the silent switch on, and if samples still fail the built-in synth takes over instead of silence.
+- Umami analytics turned on.
+
 ## 2.0.0 — 2026-10-08
 
 ### Share

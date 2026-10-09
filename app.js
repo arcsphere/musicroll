@@ -2,6 +2,7 @@
 // Rows of the text grid are pitches (top = highest), columns are 16th-note steps.
 
 import { ROLES, ROLE_LABEL, ROLE_COLOR, ROLE_VEL, GM_DRUM, KIT_ROLE_MATCH, KITS, STYLES, randomStyle, seedLabel, styleRoles, hitsAt } from "./drums.js";
+import { BASS_STYLES, BASS_PROGRAM, randomBass, bassLine } from "./bass.js";
 import { buildMidi, downloadBytes, GM_PROGRAM } from "./midi.js";
 import { encodeState, decodeState, shareTargets, copyText } from "./share.js";
 import { initAnalytics, track as trackEvent } from "./analytics.js";
@@ -24,6 +25,8 @@ const els = {
   share: $("share"), midi: $("midi"), sharedBanner: $("sharedBanner"), sharedPlay: $("sharedPlay"),
   shareDialog: $("shareDialog"), shareUrl: $("shareUrl"), copyLink: $("copyLink"), nativeShare: $("nativeShare"),
   shareSummary: $("shareSummary"), shareLinks: document.querySelectorAll("[data-net]"), version: $("version"),
+  bass: $("bass"), bassOpts: $("bassOpts"), bassStyle: $("bassStyle"), bassSound: $("bassSound"),
+  bassVol: $("bassVol"), bassDice: $("bassDice"),
 };
 const g = els.canvas.getContext("2d");
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -345,6 +348,22 @@ function currentStyle() {
 }
 
 const drumHitsAt = (step) => hitsAt(els.pattern.value, currentStyle().style, step, song.bottomDensity);
+
+// Bass: style (or seeded random groove) and the line it makes for the current song.
+let bassSeed = 0;
+let bassCache = { key: null, line: [] };
+function currentBassStyle() {
+  const key = els.bassStyle.value;
+  return key === "random" ? randomBass(bassSeed) : BASS_STYLES[key];
+}
+function bassNotes() {
+  const key = `${els.bassStyle.value}:${bassSeed}`;
+  if (bassCache.song !== song || bassCache.key !== key) {
+    const line = bassLine(song, els.bassStyle.value, currentBassStyle(), +els.root.value, SCALES[els.scale.value]);
+    bassCache = { song, key, line };
+  }
+  return bassCache.line;
+}
 const swingAmount = () => +els.swing.value / 100;
 
 // ---------------------------------------------------------------- audio
@@ -390,7 +409,7 @@ function unlockAudio() {
 }
 const melodic = new Map();
 const kits = new Map();
-let activeInst = null, activeKit = null;
+let activeInst = null, activeKit = null, activeBass = null;
 const synthVoices = new Set();
 let clickNodes = [];
 
@@ -423,6 +442,7 @@ function loadInstrument(name) {
     .then(() => {
       entry.loaded = true;
       if (els.instrument.value === name) activeInst = entry;
+      if (els.bassSound.value === name) activeBass = entry;
       updateLoadHint();
       return entry;
     });
@@ -486,6 +506,31 @@ function playNote(midi, time, dur, vel) {
   if (e && e.inst && !e.failed) e.inst.start({ note: midi, time, duration: dur, velocity: vel });
   else synthNote(midi, time, dur, vel);
 }
+
+function synthBass(midi, time, dur, vel) {
+  const o = ctx.createOscillator(), filt = ctx.createBiquadFilter(), env = ctx.createGain();
+  o.type = "sawtooth";
+  o.frequency.value = 440 * 2 ** ((midi - 69) / 12);
+  filt.type = "lowpass";
+  filt.frequency.setValueAtTime(900, time);
+  filt.frequency.exponentialRampToValueAtTime(220, time + 0.25);
+  const peak = 0.32 * (vel / 127);
+  env.gain.setValueAtTime(0, time);
+  env.gain.linearRampToValueAtTime(peak, time + 0.008);
+  env.gain.setTargetAtTime(peak * 0.6, time + 0.05, 0.1);
+  env.gain.setTargetAtTime(0, time + dur, 0.05);
+  o.connect(filt).connect(env).connect(master);
+  o.start(time);
+  o.stop(time + dur + 0.4);
+  track(o);
+}
+
+function playBass(midi, time, dur, vel) {
+  const e = activeBass;
+  if (e && e.inst && !e.failed) e.inst.start({ note: midi, time, duration: dur, velocity: vel });
+  else synthBass(midi, time, dur, vel);
+}
+const bassVel = (v) => clamp(Math.round(v * (+els.bassVol.value / 100)), 1, 127);
 
 function synthDrum(role, time, vel) {
   const amp = vel / 127;
@@ -572,7 +617,7 @@ function setState(state) {
     composing: "AI is composing…",
     tuning: `AI is tuning the ${instLabel().toLowerCase()}…`,
     countin: "AI is counting in…",
-    playing: `AI is playing · ${instLabel()}${els.drums.checked ? " + drums" : ""}`,
+    playing: `AI is playing · ${instLabel()}${els.bass.checked ? " + bass" : ""}${els.drums.checked ? " + drums" : ""}`,
     done: "Performance complete",
   }[state];
   els.pillText.textContent = label;
@@ -590,9 +635,11 @@ function startPerformance() {
   play.skipCountIn = !els.intro.checked;
   const inst = loadInstrument(els.instrument.value);
   const kit = els.drums.checked ? loadKit(els.kit.value) : null;
-  Promise.all([inst.ready, kit?.ready]).then(() => {
+  const bass = els.bass.checked ? loadInstrument(els.bassSound.value) : null;
+  Promise.all([inst.ready, kit?.ready, bass?.ready]).then(() => {
     activeInst = inst;
     if (kit) activeKit = kit;
+    if (bass) activeBass = bass;
     play.loaded = true;
   });
   if (els.intro.checked && !reducedMotion.matches) {
@@ -671,6 +718,13 @@ function scheduleStep(step, t, dur) {
     playNote(note.midi, t, d * 0.96, vel);
     events.push({ t, kind: "note", note, d });
   }
+  if (els.bass.checked) {
+    const b = bassNotes()[step];
+    if (b) {
+      playBass(b.midi, t, b.len * dur * 0.92, bassVel(b.vel));
+      events.push({ t, kind: "bass", d: b.len * dur });
+    }
+  }
   if (els.drums.checked) {
     for (const hit of drumHitsAt(step)) {
       const v = drumVel(hit);
@@ -698,6 +752,9 @@ const view = { W: 0, H: 0, dpr: 1, cellW: 20, cellH: 16, rollTop: RULER_H, drumT
 let pal = {};
 const keyGlow = new Map();   // row -> audio time until which the key is lit
 const drumFlash = {};        // role -> audio time of last hit
+let bassFlash = 0;           // audio time until which the bass label is lit
+const BASS_H = 20;
+const BASS_COLOR = "#f0a04b";
 const particles = [];
 const hands = [{ y: null, press: 0 }, { y: null, press: 0 }];
 let lastFrame = performance.now() / 1000;
@@ -732,10 +789,11 @@ function layout() {
   const cellH = clamp(Math.floor(360 / R), 7, 26);
   const cellW = clamp((W - KEY_W) / song.totalSteps, 10, 34);
   const rollH = R * cellH;
-  const drumTop = RULER_H + rollH + DRUM_GAP;
-  const H = drumTop + (els.drums.checked ? currentStyle().roles.length * DRUM_ROW_H : -DRUM_GAP) + PAD_B;
+  const bassTop = RULER_H + rollH + DRUM_GAP;
+  const drumTop = bassTop + (els.bass.checked ? BASS_H + 8 : 0);
+  const H = drumTop + (els.drums.checked ? currentStyle().roles.length * DRUM_ROW_H : els.bass.checked ? -8 : -DRUM_GAP) + PAD_B;
   const dpr = window.devicePixelRatio || 1;
-  Object.assign(view, { cellW, cellH, drumTop, rollH });
+  Object.assign(view, { cellW, cellH, drumTop, bassTop, rollH });
   if (W !== view.W || H !== view.H || dpr !== view.dpr) {
     Object.assign(view, { W, H, dpr });
     els.canvas.width = Math.round(W * dpr);
@@ -792,6 +850,7 @@ function processEvents(now) {
   while (events.length && events[0].t <= now) {
     const e = events.shift();
     if (e.kind === "drum") { drumFlash[e.role] = e.t; continue; }
+    if (e.kind === "bass") { bassFlash = e.t + e.d; continue; }
     const { note } = e;
     if (note.row >= song.R) continue;
     keyGlow.set(note.row, Math.max(keyGlow.get(note.row) ?? 0, e.t + e.d));
@@ -889,6 +948,34 @@ function draw(t, now, dt) {
     }
   }
 
+  // bass lane
+  if (els.bass.checked) {
+    const line = bassNotes();
+    const y = view.bassTop;
+    g.font = "700 10px ui-sans-serif, system-ui, sans-serif";
+    g.textAlign = "left";
+    for (let s = 0; s < steps; s++) {
+      const b = line[s];
+      if (!b) continue;
+      const x = ox + s * cellW, w = Math.max(b.len * cellW - 2, 3);
+      if (x + w < KEY_W || x > W) continue;
+      const sounding = pos >= s && pos < s + b.len;
+      g.globalAlpha = b.vel < 60 ? 0.45 : sounding ? 1 : 0.75;
+      g.shadowBlur = sounding ? 12 : 0;
+      g.shadowColor = BASS_COLOR;
+      g.fillStyle = BASS_COLOR;
+      roundRect(x + 1, y + 2, w, BASS_H - 4, 4);
+      g.fill();
+      g.shadowBlur = 0;
+      if (w > 18) {
+        g.globalAlpha = 1;
+        g.fillStyle = "rgba(0,0,0,0.6)";
+        g.fillText(NOTE_NAMES[b.midi % 12], x + 5, y + BASS_H / 2 + 0.5);
+      }
+    }
+    g.globalAlpha = 1;
+  }
+
   // drum lane
   if (els.drums.checked) {
     const sz = Math.min(cellW, DRUM_ROW_H) - 4;
@@ -933,7 +1020,8 @@ function draw(t, now, dt) {
   // playhead with a "thinking" shimmer
   if (pos >= 0) {
     const x = ox + pos * cellW;
-    const bottom = els.drums.checked ? drumTop + currentStyle().roles.length * DRUM_ROW_H : rollTop + rollH;
+    const bottom = els.drums.checked ? drumTop + currentStyle().roles.length * DRUM_ROW_H
+      : els.bass.checked ? view.bassTop + BASS_H : rollTop + rollH;
     const glow = 0.18 + 0.1 * Math.sin(t * 7);
     const grad = g.createLinearGradient(x - 14, 0, x + 14, 0);
     grad.addColorStop(0, "transparent");
@@ -1033,6 +1121,11 @@ function drawKeyboard(now, pos, dt, t) {
       g.fillStyle = lit ? "#111" : black ? pal.keyBlackText : pal.keyWhiteText;
       g.fillText(NOTE_NAMES[midi % 12] + (Math.floor(midi / 12) - 1), 10, y + cellH / 2 + 0.5);
     }
+  }
+  if (els.bass.checked) {
+    g.font = "600 10px ui-sans-serif, system-ui, sans-serif";
+    g.fillStyle = bassFlash > now && play.state !== "idle" ? BASS_COLOR : pal.muted;
+    g.fillText("Bass", 10, view.bassTop + BASS_H / 2);
   }
   if (els.drums.checked) {
     g.font = "600 10px ui-sans-serif, system-ui, sans-serif";
@@ -1257,6 +1350,35 @@ els.dice.addEventListener("click", () => {
   trackEvent("drums_randomise");
 });
 
+// ---------------------------------------------------------------- bass UI
+
+const BASS_RANDOM_OPT = els.bassStyle.querySelector('option[value="random"]');
+function showBassRandomOption() {
+  BASS_RANDOM_OPT.hidden = false;
+  BASS_RANDOM_OPT.textContent = `🎲 Random #${seedLabel(bassSeed)}`;
+}
+function loadSelectedBass() {
+  if (!ctx || !els.bass.checked) return;
+  const e = loadInstrument(els.bassSound.value);
+  if (e.loaded) activeBass = e;
+}
+els.bass.addEventListener("change", () => {
+  els.bassOpts.classList.toggle("off", !els.bass.checked);
+  loadSelectedBass();
+  if (play.state === "playing") setState("playing");
+});
+els.bassSound.addEventListener("change", loadSelectedBass);
+els.bassDice.addEventListener("click", () => {
+  bassSeed = crypto.getRandomValues(new Uint32Array(1))[0];
+  showBassRandomOption();
+  els.bassStyle.value = "random";
+  els.bassSound.value = pickOne(optionValues(els.bassSound));
+  if (!els.bass.checked) els.bass.checked = true;
+  els.bass.dispatchEvent(new Event("change"));
+  scheduleUrlSync();
+  trackEvent("bass_randomise");
+});
+
 // "Surprise me": a random instrument, scale, key, font and beat in one go.
 const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const optionValues = (sel) => [...sel.options].filter((o) => !o.hidden).map((o) => o.value);
@@ -1268,8 +1390,11 @@ els.surprise.addEventListener("click", () => {
   els.drums.checked = Math.random() < 0.8;
   els.pattern.value = pickOne(Object.keys(STYLES));
   els.kit.value = pickOne(KITS);
+  els.bass.checked = Math.random() < 0.7;
+  els.bassStyle.value = pickOne(Object.keys(BASS_STYLES));
+  els.bassSound.value = pickOne(optionValues(els.bassSound));
   setStyleSwing();
-  for (const el of [els.instrument, els.drums, els.kit]) el.dispatchEvent(new Event("change"));
+  for (const el of [els.instrument, els.drums, els.kit, els.bass]) el.dispatchEvent(new Event("change"));
   refresh();
   scheduleUrlSync();
   trackEvent("surprise");
@@ -1290,8 +1415,14 @@ els.midi.addEventListener("click", () => {
     for (let step = 0; step < song.totalSteps; step++)
       for (const hit of drumHitsAt(step)) drums.push({ step, note: GM_DRUM[hit.role], vel: drumVel(hit), roll: hit.roll });
   }
+  const bass = els.bass.checked
+    ? {
+        program: BASS_PROGRAM[els.bassSound.value] ?? 33,
+        notes: bassNotes().flatMap((b, step) => (b ? [{ step, len: b.len, midi: b.midi, vel: bassVel(b.vel) }] : [])),
+      }
+    : null;
   const bytes = buildMidi({
-    bpm: +els.bpm.value, program: GM_PROGRAM[els.instrument.value] ?? 0, swing: swingAmount(), notes, drums,
+    bpm: +els.bpm.value, program: GM_PROGRAM[els.instrument.value] ?? 0, swing: swingAmount(), notes, drums, bass,
   });
   downloadBytes(bytes, `musiciate-${songSlug()}.mid`);
   trackEvent("midi_export");
@@ -1308,6 +1439,10 @@ function collectState() {
     d: {
       on: els.drums.checked ? 1 : 0, p: els.pattern.value, kt: els.kit.value,
       lv: +els.drumVol.value, sw: +els.swing.value, sd: drumSeed,
+    },
+    bs: {
+      on: els.bass.checked ? 1 : 0, p: els.bassStyle.value, s: els.bassSound.value,
+      lv: +els.bassVol.value, sd: bassSeed,
     },
   };
 }
@@ -1343,6 +1478,14 @@ function applyState(st) {
   setRange(els.drumVol, d.lv);
   setRange(els.swing, d.sw);
   setCheck(els.drums, d.on);
+  const bs = st.bs && typeof st.bs === "object" ? st.bs : {};
+  if (Number.isInteger(bs.sd) && bs.sd >= 0) bassSeed = bs.sd >>> 0;
+  if (bs.p === "random") showBassRandomOption();
+  setSelect(els.bassStyle, bs.p);
+  setSelect(els.bassSound, bs.s);
+  setRange(els.bassVol, bs.lv);
+  setCheck(els.bass, bs.on);
+  els.bassOpts.classList.toggle("off", !els.bass.checked);
   els.bpmOut.textContent = els.bpm.value;
   updateSwingOut();
   els.drumOpts.classList.toggle("off", !els.drums.checked);
@@ -1386,7 +1529,8 @@ els.share.addEventListener("click", async () => {
   for (const a of els.shareLinks) a.href = targets[a.dataset.net];
   const label = currentStyle().style.label;
   const drums = els.drums.checked ? ` · ${label[0].toLowerCase() + label.slice(1)} drums` : "";
-  els.shareSummary.textContent = `${text.replace(/ 🎹$/, "")} · ${instLabel()}${drums}`;
+  const bassTxt = els.bass.checked ? ` · ${els.bassSound.selectedOptions[0].textContent.toLowerCase()} bass` : "";
+  els.shareSummary.textContent = `${text.replace(/ 🎹$/, "")} · ${instLabel()}${bassTxt}${drums}`;
   els.nativeShare.hidden = !navigator.share;
   els.nativeShare.onclick = () => {
     navigator.share({ title: "musiciate", text, url }).catch(() => {});

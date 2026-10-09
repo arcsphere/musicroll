@@ -43,9 +43,10 @@ const name = (s) => meta(0, 0x03, ascii(s));
  * @param {number} o.swing        0..1, delays odd steps by swing * half a step
  * @param {{step:number,len:number,midi:number,vel:number}[]} o.notes
  * @param {{step:number,note:number,vel:number,roll?:boolean}[]} o.drums
+ * @param {{program:number, notes:{step:number,len:number,midi:number,vel:number}[]}} [o.bass]
  * @returns {Uint8Array}
  */
-export function buildMidi({ bpm, program, swing, notes, drums }) {
+export function buildMidi({ bpm, program, swing, notes, drums, bass }) {
   const tickOf = (step) => step * STEP + (step % 2 ? Math.round(swing * STEP * 0.5) : 0);
 
   const usPerQuarter = Math.round(60e6 / bpm);
@@ -55,14 +56,19 @@ export function buildMidi({ bpm, program, swing, notes, drums }) {
     meta(0, 0x58, [4, 2, 24, 8]), // 4/4
   ]);
 
-  const melodyEvents = [name("Melody"), { tick: 0, order: 0, bytes: [0xc0, program & 0x7f] }];
-  for (const n of notes) {
-    const on = tickOf(n.step);
-    const off = Math.max(on + 1, n.step * STEP + Math.round(n.len * STEP * 0.96));
-    melodyEvents.push({ tick: on, order: 1, bytes: [0x90, n.midi & 0x7f, n.vel & 0x7f] });
-    melodyEvents.push({ tick: off, order: 0, bytes: [0x80, n.midi & 0x7f, 0] });
-  }
-  const tracks = [conductor, chunk(melodyEvents)];
+  // One pitched track on MIDI channel `ch`.
+  const pitched = (title, ch, prog, list) => {
+    const events = [name(title), { tick: 0, order: 0, bytes: [0xc0 | ch, prog & 0x7f] }];
+    for (const n of list) {
+      const on = tickOf(n.step);
+      const off = Math.max(on + 1, n.step * STEP + Math.round(n.len * STEP * 0.96));
+      events.push({ tick: on, order: 1, bytes: [0x90 | ch, n.midi & 0x7f, n.vel & 0x7f] });
+      events.push({ tick: off, order: 0, bytes: [0x80 | ch, n.midi & 0x7f, 0] });
+    }
+    return chunk(events);
+  };
+  const tracks = [conductor, pitched("Melody", 0, program, notes)];
+  if (bass?.notes.length) tracks.push(pitched("Bass", 1, bass.program, bass.notes));
 
   if (drums.length) {
     const drumEvents = [name("Drums")];
