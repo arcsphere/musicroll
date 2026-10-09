@@ -1,6 +1,12 @@
 // ASCII Piano Roll — turns text / ASCII art into a piano roll and plays it.
 // Rows of the text grid are pitches (top = highest), columns are 16th-note steps.
 
+import { ROLES, ROLE_LABEL, ROLE_COLOR, ROLE_VEL, GM_DRUM, KIT_ROLE_MATCH, KITS, STYLES, randomStyle, seedLabel, styleRoles, hitsAt } from "./drums.js";
+import { buildMidi, downloadBytes, GM_PROGRAM } from "./midi.js";
+import { encodeState, decodeState, shareTargets, copyText } from "./share.js";
+import { initAnalytics, track as trackEvent } from "./analytics.js";
+import { VERSION, CHANGELOG_URL } from "./version.js";
+
 const SMPLR_URL = "https://unpkg.com/smplr@0.15.1/dist/index.mjs";
 const smplrReady = import(SMPLR_URL).catch((err) => {
   console.warn("smplr failed to load, using built-in synth", err);
@@ -14,6 +20,10 @@ const els = {
   pattern: $("pattern"), kit: $("kit"), drumVol: $("drumVol"), loop: $("loop"), intro: $("intro"),
   play: $("play"), canvas: $("roll"), stage: $("stage"), pill: $("pill"), pillText: $("pillText"),
   replay: $("replay"), presets: $("presets"), info: $("info"), loadHint: $("loadHint"),
+  swing: $("swing"), swingOut: $("swingOut"), dice: $("dice"), surprise: $("surprise"),
+  share: $("share"), midi: $("midi"), sharedBanner: $("sharedBanner"), sharedPlay: $("sharedPlay"),
+  shareDialog: $("shareDialog"), shareUrl: $("shareUrl"), copyLink: $("copyLink"), nativeShare: $("nativeShare"),
+  shareSummary: $("shareSummary"), shareLinks: document.querySelectorAll("[data-net]"), version: $("version"),
 };
 const g = els.canvas.getContext("2d");
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -320,30 +330,22 @@ function buildSong() {
 
 // ---------------------------------------------------------------- drums
 
-const ROLES = ["kick", "snare", "hat", "clap"];
-const ROLE_LABEL = { kick: "Kick", snare: "Snare", hat: "Hat", clap: "Clap" };
-const ROLE_COLOR = { kick: "#ff7a59", snare: "#ffc145", hat: "#4fd1c5", clap: "#b48cff" };
-const PATTERNS = {
-  four:   { kick: "x...x...x...x...", snare: "................", hat: "..x...x...x...x.", clap: "....x.......x..." },
-  rock:   { kick: "x.......x.x.....", snare: "....x.......x...", hat: "x.x.x.x.x.x.x.x.", clap: "................" },
-  hiphop: { kick: "x.....x...x..x..", snare: "....x.......x...", hat: "x.xxx.x.x.xxx.x.", clap: "............x..." },
-  bossa:  { kick: "x..xx..xx..xx..x", snare: "x..x..x...x..x..", hat: "xxxxxxxxxxxxxxxx", clap: "................" },
-};
+// The beat randomiser stores its seed; the style menu shows "Random #xxxx" for it.
+let drumSeed = 0;
+let styleCache = { key: null, style: null, roles: [] };
 
-function drumHits(step) {
-  const p = els.pattern.value;
-  if (p === "text") {
-    const d = song.bottomDensity[step] ?? 0;
-    return {
-      kick: step % 16 === 0 || (step % 2 === 0 && d >= 0.6),
-      snare: step % 8 === 4,
-      hat: step % 2 === 0,
-      clap: step % 16 === 12 && d >= 0.3,
-    };
+function currentStyle() {
+  const key = els.pattern.value;
+  const cacheKey = key === "random" ? `random:${drumSeed}` : key;
+  if (styleCache.key !== cacheKey) {
+    const style = key === "random" ? randomStyle(drumSeed) : STYLES[key];
+    styleCache = { key: cacheKey, style, roles: styleRoles(key, style) };
   }
-  const pat = PATTERNS[p], i = step % 16;
-  return { kick: pat.kick[i] === "x", snare: pat.snare[i] === "x", hat: pat.hat[i] === "x", clap: pat.clap[i] === "x" };
+  return styleCache;
 }
+
+const drumHitsAt = (step) => hitsAt(els.pattern.value, currentStyle().style, step, song.bottomDensity);
+const swingAmount = () => +els.swing.value / 100;
 
 // ---------------------------------------------------------------- audio
 
@@ -402,12 +404,7 @@ function loadKit(name) {
     .then(() => {
       const names = entry.inst.sampleNames;
       const pick = (...res) => { for (const re of res) { const hit = names.find((s) => re.test(s)); if (hit) return hit; } return null; };
-      entry.roles = {
-        kick: pick(/kick/),
-        snare: pick(/snare/),
-        hat: pick(/hihat-close|hhclosed/, /^hihat$|hh/),
-        clap: pick(/clap/),
-      };
+      entry.roles = Object.fromEntries(ROLES.map((role) => [role, pick(...KIT_ROLE_MATCH[role])]));
     })
     .catch((err) => { console.warn("Drum kit failed, falling back to synth drums:", name, err); entry.failed = true; })
     .then(() => {
@@ -462,12 +459,23 @@ function synthDrum(role, time, vel) {
     o.start(time); o.stop(time + 0.4); track(o);
     return;
   }
+  if (role === "perc") {
+    const o = ctx.createOscillator(), env = ctx.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(820, time);
+    env.gain.setValueAtTime(0.5 * amp, time);
+    env.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+    o.connect(env).connect(master);
+    o.start(time); o.stop(time + 0.1); track(o);
+    return;
+  }
   const src = ctx.createBufferSource(), filt = ctx.createBiquadFilter(), env = ctx.createGain();
   src.buffer = noiseBuf;
-  const len = role === "hat" ? 0.05 : role === "clap" ? 0.18 : 0.2;
-  filt.type = role === "hat" ? "highpass" : "bandpass";
-  filt.frequency.value = role === "hat" ? 7000 : role === "clap" ? 1500 : 1800;
-  env.gain.setValueAtTime((role === "hat" ? 0.25 : 0.6) * amp, time);
+  const hatLike = role === "hat" || role === "open";
+  const len = role === "hat" ? 0.05 : role === "open" ? 0.28 : role === "clap" ? 0.18 : 0.2;
+  filt.type = hatLike ? "highpass" : "bandpass";
+  filt.frequency.value = hatLike ? 7000 : role === "clap" ? 1500 : 1800;
+  env.gain.setValueAtTime((hatLike ? 0.25 : 0.6) * amp, time);
   env.gain.exponentialRampToValueAtTime(0.001, time + len);
   src.connect(filt).connect(env).connect(master);
   src.start(time); src.stop(time + len + 0.05); track(src);
@@ -607,22 +615,26 @@ function schedule() {
   }
 }
 
+// Velocity for the melody notes that start together on one step.
+const chordVel = (count) => clamp(Math.round(108 - 7 * (count - 1)), 50, 112);
+const drumVel = (hit) => clamp(Math.round(ROLE_VEL[hit.role] * hit.v * (+els.drumVol.value / 100)), 1, 127);
+
 function scheduleStep(step, t, dur) {
+  // Swing pushes every second 16th later, for notes and drums alike.
+  if (step % 2) t += swingAmount() * dur * 0.5;
   const notes = song.notesByStep[step];
-  const vel = clamp(Math.round(108 - 7 * (notes.length - 1)), 50, 112);
+  const vel = chordVel(notes.length);
   for (const note of notes) {
     const d = note.len * dur;
     playNote(note.midi, t, d * 0.96, vel);
     events.push({ t, kind: "note", note, d });
   }
   if (els.drums.checked) {
-    const hits = drumHits(step);
-    const lvl = +els.drumVol.value / 100;
-    const base = { kick: 115, snare: 100, hat: 70, clap: 95 };
-    for (const role of ROLES) {
-      if (!hits[role]) continue;
-      playDrum(role, t, Math.round(base[role] * lvl));
-      events.push({ t, kind: "drum", role });
+    for (const hit of drumHitsAt(step)) {
+      const v = drumVel(hit);
+      playDrum(hit.role, t, v);
+      if (hit.roll) playDrum(hit.role, t + dur / 2, Math.round(v * 0.8));
+      events.push({ t, kind: "drum", role: hit.role });
     }
   }
 }
@@ -679,7 +691,7 @@ function layout() {
   const cellW = clamp((W - KEY_W) / song.totalSteps, 10, 34);
   const rollH = R * cellH;
   const drumTop = RULER_H + rollH + DRUM_GAP;
-  const H = drumTop + (els.drums.checked ? ROLES.length * DRUM_ROW_H : -DRUM_GAP) + PAD_B;
+  const H = drumTop + (els.drums.checked ? currentStyle().roles.length * DRUM_ROW_H : -DRUM_GAP) + PAD_B;
   const dpr = window.devicePixelRatio || 1;
   Object.assign(view, { cellW, cellH, drumTop, rollH });
   if (W !== view.W || H !== view.H || dpr !== view.dpr) {
@@ -840,14 +852,16 @@ function draw(t, now, dt) {
     for (let s = 0; s < steps; s++) {
       const x = ox + s * cellW;
       if (x + cellW < KEY_W || x > W) continue;
-      const hits = drumHits(s);
+      const hits = drumHitsAt(s);
       const cur = pos >= s && pos < s + 1;
-      ROLES.forEach((role, i) => {
-        if (!hits[role]) return;
+      const lanes = currentStyle().roles;
+      hits.forEach(({ role, v }) => {
+        const i = lanes.indexOf(role);
+        if (i < 0) return;
         const y = drumTop + i * DRUM_ROW_H;
         const flash = now - (drumFlash[role] ?? -9) < 0.12;
         g.fillStyle = ROLE_COLOR[role];
-        g.globalAlpha = cur && flash ? 1 : 0.55;
+        g.globalAlpha = cur && flash ? 1 : v < 0.6 ? 0.3 : 0.55;
         roundRect(x + (cellW - sz) / 2, y + (DRUM_ROW_H - sz) / 2, sz, sz, 3);
         g.fill();
         g.globalAlpha = 1;
@@ -876,7 +890,7 @@ function draw(t, now, dt) {
   // playhead with a "thinking" shimmer
   if (pos >= 0) {
     const x = ox + pos * cellW;
-    const bottom = els.drums.checked ? drumTop + ROLES.length * DRUM_ROW_H : rollTop + rollH;
+    const bottom = els.drums.checked ? drumTop + currentStyle().roles.length * DRUM_ROW_H : rollTop + rollH;
     const glow = 0.18 + 0.1 * Math.sin(t * 7);
     const grad = g.createLinearGradient(x - 14, 0, x + 14, 0);
     grad.addColorStop(0, "transparent");
@@ -979,7 +993,7 @@ function drawKeyboard(now, pos, dt, t) {
   }
   if (els.drums.checked) {
     g.font = "600 10px ui-sans-serif, system-ui, sans-serif";
-    ROLES.forEach((role, i) => {
+    currentStyle().roles.forEach((role, i) => {
       const y = drumTop + i * DRUM_ROW_H;
       const flash = now - (drumFlash[role] ?? -9) < 0.12;
       g.fillStyle = flash ? ROLE_COLOR[role] : pal.muted;
@@ -1101,7 +1115,12 @@ function presetRow(label, items, cls) {
     b.type = "button";
     b.className = "chip " + cls;
     b.textContent = text;
-    b.addEventListener("click", () => { els.text.value = text; refresh(); });
+    b.addEventListener("click", () => {
+      els.text.value = text;
+      refresh();
+      scheduleUrlSync();
+      trackEvent("preset", { name: text });
+    });
     row.append(b);
   }
   els.presets.append(row);
@@ -1133,7 +1152,10 @@ els.loop.addEventListener("change", () => {
 });
 els.play.addEventListener("click", () => {
   const busy = play.state !== "idle" && play.state !== "done";
-  busy ? stopPerformance() : startPerformance();
+  if (busy) { stopPerformance(); return; }
+  els.sharedBanner.hidden = true;
+  startPerformance();
+  trackEvent("play", { kind: song.mode });
 });
 els.replay.addEventListener("click", startPerformance);
 document.addEventListener("keydown", (e) => {
@@ -1165,7 +1187,187 @@ els.canvas.addEventListener("wheel", (e) => {
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readTheme);
 new MutationObserver(readTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
+// ---------------------------------------------------------------- drums UI
+
+const RANDOM_OPT = els.pattern.querySelector('option[value="random"]');
+function showRandomOption() {
+  RANDOM_OPT.hidden = false;
+  RANDOM_OPT.textContent = `🎲 Random #${seedLabel(drumSeed)}`;
+}
+const updateSwingOut = () => { els.swingOut.textContent = `${els.swing.value}%`; };
+function setStyleSwing() {
+  els.swing.value = Math.round(currentStyle().style.swing * 100);
+  updateSwingOut();
+}
+
+els.swing.addEventListener("input", updateSwingOut);
+els.pattern.addEventListener("change", setStyleSwing);
+els.dice.addEventListener("click", () => {
+  drumSeed = crypto.getRandomValues(new Uint32Array(1))[0];
+  showRandomOption();
+  els.pattern.value = "random";
+  els.kit.value = KITS[drumSeed % KITS.length];
+  setStyleSwing();
+  if (!els.drums.checked) { els.drums.checked = true; els.drums.dispatchEvent(new Event("change")); }
+  els.kit.dispatchEvent(new Event("change"));
+  scheduleUrlSync();
+  trackEvent("drums_randomise");
+});
+
+// "Surprise me": a random instrument, scale, key, font and beat in one go.
+const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const optionValues = (sel) => [...sel.options].filter((o) => !o.hidden).map((o) => o.value);
+els.surprise.addEventListener("click", () => {
+  els.instrument.value = pickOne(optionValues(els.instrument));
+  els.scale.value = pickOne(["pentatonic", "pentatonic", "major", "minor", "blues"]);
+  els.root.value = pickOne(optionValues(els.root));
+  els.font.value = pickOne(optionValues(els.font));
+  els.drums.checked = Math.random() < 0.8;
+  els.pattern.value = pickOne(Object.keys(STYLES));
+  els.kit.value = pickOne(KITS);
+  setStyleSwing();
+  for (const el of [els.instrument, els.drums, els.kit]) el.dispatchEvent(new Event("change"));
+  refresh();
+  scheduleUrlSync();
+  trackEvent("surprise");
+});
+
+// ---------------------------------------------------------------- MIDI export
+
+function songSlug() {
+  if (song.mode === "word") return els.text.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "song";
+  return song.mode === "emoji" ? "emoji" : "drawing";
+}
+
+els.midi.addEventListener("click", () => {
+  if (!song.notes.length) return;
+  const notes = song.notes.map((n) => ({ step: n.start, len: n.len, midi: n.midi, vel: chordVel(song.notesByStep[n.start].length) }));
+  const drums = [];
+  if (els.drums.checked) {
+    for (let step = 0; step < song.totalSteps; step++)
+      for (const hit of drumHitsAt(step)) drums.push({ step, note: GM_DRUM[hit.role], vel: drumVel(hit), roll: hit.roll });
+  }
+  const bytes = buildMidi({
+    bpm: +els.bpm.value, program: GM_PROGRAM[els.instrument.value] ?? 0, swing: swingAmount(), notes, drums,
+  });
+  downloadBytes(bytes, `musiciate-${songSlug()}.mid`);
+  trackEvent("midi_export");
+});
+
+// ---------------------------------------------------------------- song state in the link
+
+function collectState() {
+  return {
+    v: 1,
+    t: els.text.value, m: els.mode.value, f: els.font.value, i: els.instrument.value,
+    sc: els.scale.value, k: +els.root.value, o: +els.octave.value, b: +els.bpm.value,
+    su: els.sustain.checked ? 1 : 0, l: els.loop.checked ? 1 : 0,
+    d: {
+      on: els.drums.checked ? 1 : 0, p: els.pattern.value, kt: els.kit.value,
+      lv: +els.drumVol.value, sw: +els.swing.value, sd: drumSeed,
+    },
+  };
+}
+
+// Shared links are untrusted input: only accept values the controls already offer.
+function setSelect(el, v) {
+  if (v == null) return;
+  const val = String(v);
+  if ([...el.options].some((o) => o.value === val)) el.value = val;
+}
+function setRange(el, v) {
+  const n = Number(v);
+  if (v != null && Number.isFinite(n)) el.value = String(clamp(Math.round(n), +el.min, +el.max));
+}
+const setCheck = (el, v) => { if (v != null) el.checked = !!v; };
+
+function applyState(st) {
+  if (typeof st.t === "string") els.text.value = st.t.slice(0, 2000);
+  setSelect(els.mode, st.m);
+  setSelect(els.font, st.f);
+  setSelect(els.instrument, st.i);
+  setSelect(els.scale, st.sc);
+  setSelect(els.root, st.k);
+  setSelect(els.octave, st.o);
+  setRange(els.bpm, st.b);
+  setCheck(els.sustain, st.su);
+  setCheck(els.loop, st.l);
+  const d = st.d && typeof st.d === "object" ? st.d : {};
+  if (Number.isInteger(d.sd) && d.sd >= 0) drumSeed = d.sd >>> 0;
+  if (d.p === "random") showRandomOption();
+  setSelect(els.pattern, d.p);
+  setSelect(els.kit, d.kt);
+  setRange(els.drumVol, d.lv);
+  setRange(els.swing, d.sw);
+  setCheck(els.drums, d.on);
+  els.bpmOut.textContent = els.bpm.value;
+  updateSwingOut();
+  els.drumOpts.classList.toggle("off", !els.drums.checked);
+}
+
+let urlTimer = null;
+function scheduleUrlSync() {
+  clearTimeout(urlTimer);
+  urlTimer = setTimeout(async () => {
+    history.replaceState(null, "", `${location.pathname}?s=${await encodeState(collectState())}`);
+  }, 400);
+}
+for (const type of ["input", "change"]) document.querySelector(".grid").addEventListener(type, scheduleUrlSync);
+
+async function loadFromUrl() {
+  const param = new URLSearchParams(location.search).get("s");
+  if (!param) return;
+  const st = await decodeState(param);
+  if (!st) { history.replaceState(null, "", location.pathname); return; }
+  applyState(st);
+  refresh();
+  els.sharedBanner.hidden = false;
+  trackEvent("shared_open");
+}
+els.sharedPlay.addEventListener("click", () => els.play.click());
+
+// ---------------------------------------------------------------- share dialog
+
+function shareText() {
+  const t = els.text.value.trim();
+  if (song.mode === "word") return `This is what "${t.slice(0, 40)}" sounds like 🎹`;
+  if (song.mode === "emoji") return `This is what ${t.slice(0, 16)} sounds like 🎹`;
+  return "This is what my drawing sounds like 🎹";
+}
+
+els.share.addEventListener("click", async () => {
+  const url = `${location.origin}/?s=${await encodeState(collectState())}`;
+  const text = shareText();
+  const targets = shareTargets(url, text);
+  els.shareUrl.value = url;
+  for (const a of els.shareLinks) a.href = targets[a.dataset.net];
+  const label = currentStyle().style.label;
+  const drums = els.drums.checked ? ` · ${label[0].toLowerCase() + label.slice(1)} drums` : "";
+  els.shareSummary.textContent = `${text.replace(/ 🎹$/, "")} · ${instLabel()}${drums}`;
+  els.nativeShare.hidden = !navigator.share;
+  els.nativeShare.onclick = () => {
+    navigator.share({ title: "musiciate", text, url }).catch(() => {});
+    trackEvent("share", { network: "device" });
+  };
+  els.shareDialog.showModal();
+  trackEvent("share_open");
+});
+for (const a of els.shareLinks) a.addEventListener("click", () => trackEvent("share", { network: a.dataset.net }));
+els.copyLink.addEventListener("click", async () => {
+  const ok = await copyText(els.shareUrl.value, els.shareUrl);
+  els.copyLink.textContent = ok ? "Copied ✓" : "Press ⌘C";
+  setTimeout(() => { els.copyLink.textContent = "Copy link"; }, 1600);
+  trackEvent("copy_link");
+});
+
+// ---------------------------------------------------------------- start
+
+els.version.textContent = `v${VERSION}`;
+els.version.href = CHANGELOG_URL;
+initAnalytics();
 readTheme();
 refresh();
+setStyleSwing();
 setState("idle");
+loadFromUrl();
 requestAnimationFrame(frame);

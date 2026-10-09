@@ -6,6 +6,20 @@
 <title>musiciate · find the shape and sound of words</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="description" content="Give words and ASCII art a shape and a sound. Type something and hear it played on a piano roll.">
+<link rel="canonical" href="https://www.musiciate.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="musiciate">
+<meta property="og:title" content="musiciate · this is what your words could sound like">
+<meta property="og:description" content="Type a word, an emoji or some ASCII art. musiciate draws it as a piano roll and plays it back to you.">
+<meta property="og:url" content="https://www.musiciate.com/">
+<meta property="og:image" content="https://www.musiciate.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A heart drawn as a colourful piano roll, with the musiciate logo">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="musiciate · this is what your words could sound like">
+<meta name="twitter:description" content="Type a word, an emoji or some ASCII art and hear it played on a piano roll.">
+<meta name="twitter:image" content="https://www.musiciate.com/og-image.png">
 <style>
   :root {
     --bg: #f4f2ee;
@@ -197,6 +211,41 @@
     box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
   }
   .btn.stop { background: var(--text); color: var(--bg); box-shadow: none; }
+  .btn-alt {
+    font: inherit; font-weight: 600; font-size: 14px; cursor: pointer;
+    padding: 9px 16px; border-radius: 10px; background: var(--panel); color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-alt:hover { border-color: var(--accent); color: var(--accent); }
+  .actions + .hint { margin: 10px 0 0; }
+  .dice-field { justify-content: flex-end; }
+  .dice-field .btn-sm { padding: 6px 10px; }
+
+  .shared-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 16px; padding: 12px 16px; border-radius: 14px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, var(--panel)), color-mix(in srgb, var(--accent-2) 12%, var(--panel)));
+    border: 1px solid var(--border); font-weight: 600;
+  }
+  .shared-banner[hidden] { display: none; }
+
+  .share-link { display: flex; gap: 8px; margin: 4px 0 8px; }
+  .share-link input {
+    flex: 1; min-width: 0; font: 12px ui-monospace, Menlo, monospace; color: var(--text);
+    background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  }
+  .share-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 14px 0; }
+  .share-btn {
+    display: flex; align-items: center; justify-content: center; min-height: 40px; padding: 8px 12px;
+    font: inherit; font-weight: 600; font-size: 14px; color: var(--text); text-decoration: none; cursor: pointer;
+    background: var(--input-bg); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .share-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .share-btn[hidden] { display: none; }
+  dialog .small { font-size: 13px; }
+  footer .version { margin-top: 10px; font-size: 12px; }
+  footer .version a { color: var(--muted); }
+  footer .version a:hover { color: var(--accent); }
   .btn-sm { font: inherit; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; }
   .hint { color: var(--muted); font-size: 12px; }
 
@@ -228,6 +277,11 @@
       <button class="btn-sm" id="replay" type="button">Replay</button>
     </div>
   </header>
+
+  <div class="shared-banner" id="sharedBanner" hidden>
+    <span>🎁 Someone shared a song with you.</span>
+    <button class="btn-sm" id="sharedPlay" type="button">▶ Play it</button>
+  </div>
 
   <div class="grid">
     <section class="card">
@@ -308,10 +362,31 @@
           <label class="field">Drum pattern
             <select id="pattern">
               <option value="text">From the text</option>
-              <option value="four">Four-on-the-floor</option>
-              <option value="rock">Rock</option>
-              <option value="hiphop">Hip-hop</option>
-              <option value="bossa">Bossa</option>
+              <option value="random" hidden>🎲 Random</option>
+              <optgroup label="Dance">
+                <option value="four">Four-on-the-floor</option>
+                <option value="house">House</option>
+                <option value="disco">Disco</option>
+                <option value="dnb">Drum &amp; bass</option>
+              </optgroup>
+              <optgroup label="Band">
+                <option value="rock">Rock</option>
+                <option value="funk">Funk</option>
+                <option value="breakbeat">Breakbeat</option>
+                <option value="march">March</option>
+                <option value="waltz">Waltz (3/4)</option>
+              </optgroup>
+              <optgroup label="Groove">
+                <option value="hiphop">Hip-hop</option>
+                <option value="trap">Trap</option>
+                <option value="lofi">Lo-fi</option>
+                <option value="reggae">Reggae (one drop)</option>
+              </optgroup>
+              <optgroup label="World">
+                <option value="bossa">Bossa nova</option>
+                <option value="samba">Samba</option>
+                <option value="afrobeat">Afrobeat</option>
+              </optgroup>
             </select>
           </label>
           <label class="field">Drum kit
@@ -326,6 +401,12 @@
           <label class="field">Drum level
             <input id="drumVol" type="range" min="0" max="100" value="70">
           </label>
+          <label class="field">Swing <output id="swingOut">0%</output>
+            <input id="swing" type="range" min="0" max="60" value="0">
+          </label>
+          <div class="field dice-field">
+            <button class="btn-sm" id="dice" type="button" title="Make up a new beat">🎲 Randomise beat</button>
+          </div>
         </div>
       </div>
       <div class="toggles">
@@ -336,8 +417,11 @@
       </div>
       <div class="actions">
         <button class="btn" id="play" type="button">▶ Play</button>
-        <span class="hint">Space = play/stop · click the roll to skip the intro · drag to scroll</span>
+        <button class="btn-alt" id="share" type="button">Share</button>
+        <button class="btn-alt" id="midi" type="button" title="Download a .mid file for FL Studio, GarageBand, Ableton…">Export MIDI</button>
+        <button class="btn-alt" id="surprise" type="button" title="Random instrument, scale, key, font and beat">✨ Surprise me</button>
       </div>
+      <p class="hint">Space = play/stop · click the roll to skip the intro · drag to scroll</p>
     </section>
   </div>
 
@@ -355,7 +439,28 @@
     <button class="link" type="button" data-open="howDialog">How it works</button>
     <button class="link" type="button" data-open="aboutDialog">About musiciate</button>
   </nav>
+  <div class="version"><a id="version" target="_blank" rel="noopener">v2.0.0</a> · <a href="https://github.com/arcsphere/musicroll" target="_blank" rel="noopener">Open source</a></div>
 </footer>
+
+<dialog id="shareDialog" aria-labelledby="shareTitle">
+  <button class="close" type="button" aria-label="Close" data-close>×</button>
+  <h2 id="shareTitle">Share this song</h2>
+  <p class="muted" id="shareSummary"></p>
+  <div class="share-link">
+    <input id="shareUrl" type="text" readonly aria-label="Song link">
+    <button class="btn-sm" id="copyLink" type="button">Copy link</button>
+  </div>
+  <p class="muted small">The link holds the whole song: words, sounds and beat. Anyone who opens it hears exactly what you made.</p>
+  <div class="share-grid">
+    <a class="share-btn" data-net="x" target="_blank" rel="noopener">X / Twitter</a>
+    <a class="share-btn" data-net="linkedin" target="_blank" rel="noopener">LinkedIn</a>
+    <a class="share-btn" data-net="facebook" target="_blank" rel="noopener">Facebook</a>
+    <a class="share-btn" data-net="whatsapp" target="_blank" rel="noopener">WhatsApp</a>
+    <a class="share-btn" data-net="email">Email</a>
+    <button class="share-btn" id="nativeShare" type="button" hidden>More…</button>
+  </div>
+  <p class="hint">Video for Instagram &amp; YouTube is coming in the next version.</p>
+</dialog>
 
 <dialog id="howDialog" aria-labelledby="howTitle">
   <button class="close" type="button" aria-label="Close" data-close>×</button>
@@ -367,7 +472,8 @@
     <li><strong>The font changes the music.</strong> The same word in Bold plays fuller chords, in Italic the chords roll like a strum, Tall spreads it over more pitches, Wide slows it down, Dotted makes it light and staccato, and Mixed gives each letter its own style. The Octave setting moves everything higher or lower.</li>
     <li><strong>Rows follow a scale.</strong> Pentatonic is the default, so any shape sounds musical. Try major, minor, blues or chromatic, and pick a key.</li>
     <li><strong>Press Play.</strong> The letters fall into place, the notes form, a 1-2-3-4 count-in plays, and the roll is performed on the instrument you chose.</li>
-    <li><strong>Add more if you like.</strong> Turn on drums, change the tempo, or switch on Loop. You can keep typing while it plays and the music changes as you go.</li>
+    <li><strong>Add more if you like.</strong> Turn on drums and pick from 17 styles, or press 🎲 to make up a new beat. Add swing, change the tempo, or switch on Loop. You can keep typing while it plays and the music changes as you go.</li>
+    <li><strong>Share it or take it further.</strong> Share sends a link that holds the whole song. Export MIDI gives you a file to open in FL Studio, GarageBand or any music app.</li>
   </ol>
   <p class="muted">Tips: lines that slope make melodies, tall columns make chords, and gaps make silence. Your name has a tune too.</p>
 </dialog>
@@ -381,6 +487,7 @@
   <p>Nothing here is composed for you, and there's no right answer. Your name, a heart, a row of slashes: each one plays back as itself. Some of it is lovely, some of it is strange, and all of it is true to what you wrote.</p>
   <p>We made it to play in the space between language, art and music, and to look at expression from a slightly different angle.</p>
   <p class="sign">musiciate is a project by <a class="brand" href="https://bostonsense.com" target="_blank" rel="noopener"><strong>Boston Sense</strong></a>, part of the <strong>Sense Labs</strong> experiments: small tools that model how art, music, language and expression flow into one another.</p>
+  <p class="muted small">We count visits and button presses anonymously, without cookies. What you type is never sent anywhere; it only lives in your browser and in the links you choose to share.</p>
 </dialog>
 
 <script>
