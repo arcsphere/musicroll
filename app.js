@@ -359,7 +359,7 @@ function currentBassStyle() {
 function bassNotes() {
   const key = `${els.bassStyle.value}:${bassSeed}`;
   if (bassCache.song !== song || bassCache.key !== key) {
-    const line = bassLine(song, els.bassStyle.value, currentBassStyle(), +els.root.value, SCALES[els.scale.value]);
+    const line = bassLine(song, els.bassStyle.value, currentBassStyle(), +els.root.value, SCALES[els.scale.value], els.scale.value);
     bassCache = { song, key, line };
   }
   return bassCache.line;

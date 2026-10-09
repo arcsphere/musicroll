@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.2 — 2026-10-09
+- The bass now plays real chords: each half bar it picks the chord (I, IV, V, vi… from the chosen key) that best fits the melody notes, leans towards the home chord, and resolves home at the end. Before, it could sit on an in-scale but off-centre note for whole bars, especially on random lines, which made the song sound like it was in another key.
+- Walking bass steps through chord notes (root, third, fifth) instead of plain scale steps.
+
 ## 2.1.1 — 2026-10-09
 - Bass always stays in the chosen key and scale. Fifths and approach notes now snap to the scale instead of landing outside it.
 
