@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.1.1 — 2026-10-09
+- Bass always stays in the chosen key and scale. Fifths and approach notes now snap to the scale instead of landing outside it.
+
 ## 2.1.0 — 2026-10-09
 
 ### Bass

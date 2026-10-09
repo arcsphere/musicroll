@@ -1,7 +1,8 @@
 // Bass track: styles, the seeded bass randomiser, and the bass line that follows the melody.
 // Pattern rows are strings, one character per 16th step (repeating with step % length):
 //   "R" root   "2" next scale note up   "3" two scale notes up   "5" fifth   "8" octave
-//   "a" approach note (a semitone below the next root)   "g" ghost (short, quiet root)
+//   "a" approach note (the scale note just below the next root)   "g" ghost (short, quiet root)
+// Every bass note stays in the chosen key and scale.
 //   "-" hold the previous note   "." rest
 import { mulberry32, seedLabel } from "./drums.js";
 
@@ -70,6 +71,16 @@ export function bassLine(song, styleKey, style, keyPc, scale) {
     }
     return p;
   };
+  // Nearest scale note to a pitch class (ties go down), and the semitone gap to it.
+  const snap = (pc) => {
+    for (let d = 0; d <= 6; d++) {
+      if (scalePcs.has((pc - d + 12) % 12)) return (pc - d + 12) % 12;
+      if (scalePcs.has((pc + d) % 12)) return (pc + d) % 12;
+    }
+    return pc;
+  };
+  const above = (from, to) => (to - from + 12) % 12; // semitones up from one pitch class to another
+  const fifthOf = (root) => above(root, snap((root + 7) % 12)) || 7;
 
   // "Follow the melody": the lowest note of each chord, two octaves down, held until the next one.
   if (styleKey === "follow") {
@@ -105,11 +116,18 @@ export function bassLine(song, styleKey, style, keyPc, scale) {
     const root = roots[w];
     let midi;
     switch (ch) {
-      case "5": midi = bassPitch(root) + 7; break;
+      case "5": midi = bassPitch(root) + fifthOf(root); break;
       case "8": midi = bassPitch(root) + 12; break;
       case "2": midi = bassPitch(scaleUp(root, 1)); break;
       case "3": midi = bassPitch(scaleUp(root, 2)); break;
-      case "a": midi = bassPitch(roots[w + 1] ?? roots[0]) - 1; break;
+      case "a": {
+        // step into the next root from the scale note just below it
+        const next = roots[w + 1] ?? roots[0];
+        let below = next;
+        for (let d = 1; d <= 12; d++) if (scalePcs.has((next - d + 12) % 12)) { below = (next - d + 12) % 12; break; }
+        midi = bassPitch(next) - (above(below, next) || 12);
+        break;
+      }
       default: midi = bassPitch(root);
     }
     let len = 1;
