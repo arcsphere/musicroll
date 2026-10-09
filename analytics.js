@@ -2,7 +2,7 @@
 // Paste the website ID from Umami (Settings → Websites → musiciate.com) below to turn it on.
 // Nothing the user types is ever sent: only event names and a small category.
 
-export const UMAMI_WEBSITE_ID = "";
+export const UMAMI_WEBSITE_ID = "cf4f91b2-a071-4f14-b889-58de51ff9a0f";
 
 export function initAnalytics() {
   if (!UMAMI_WEBSITE_ID) return;
